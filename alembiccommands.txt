@@ -1,0 +1,41 @@
+1. #initializing alembic ( do this in the root folder)
+
+    alembic init alembic
+
+2. #edit alembic.ini (Change the url db to your db url)
+
+    sqlalchemy.url = postgresql://username:password@localhost/mydatabase
+
+3. #modify your alembic/env.py ()
+
+Change this
+
+    target_metadata = None
+
+to
+
+    from database import SQLModel, engine
+
+    #import your models
+    from control_objectives_db import ControlObjective 
+
+    target_metadata = SQLModel.metadata
+
+4. #initial commit
+
+    alembic revision --autogenerate -m "Initial migration for ControlObjective"
+    alembic upgrade head (applying migration)
+
+    #add your message when changeing something in the models
+
+    alembic revision --autogenerate -m "Change in model"
+    alembic upgrade head (applying migration)
+
+5. #to check current 
+
+    alembic current
+
+
+
+
+
