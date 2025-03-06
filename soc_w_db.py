@@ -60,7 +60,7 @@ tools = [
                 "properties": {
                     "number": {
                         "type": "integer",
-                        "description": "The number of the CUEC for example 1.1 or XYZ-2.1 etc, only one number is to be added per row",
+                        "description": "The number of the CUEC for example 1 or 5 etc, only one number is to be added per row. The number is the identifier of the CUEC in the document. The number is not a text but a number and it is also not a float / decimal value.",
                     },
                     "description": {
                         "type": "string",
@@ -68,9 +68,9 @@ tools = [
                     },
                     "related_criteria": {
                         "type": "array",
-                        "description": "An array of the related criteria against each CUEC number. for example [CC2.1, CC2.2] or [1.1, 3.5] etc. The related criteria are the Control Criteria numbers, and not text descriptions, that are associated with the CUEC.",
+                        "description": "An array of the related criteria against each CUEC number. For example ['1', '2'] where the CUEC is associated with Control Criteria number 1 and 2. The related criteria are the Control Criteria numbers, and not text descriptions, that are associated with the CUEC. Do not add anything other than co-related numbers in the array.",
                         "items": {"type": "string"},
-                    }
+                    },
                 },
                 "required": ["number", "description", "related_criteria"],
             },
@@ -150,10 +150,14 @@ tools = [
                     },
                     "result_of_tests": {
                         "type": "string",
-                        "description": "Result of tests is the text mentioning if no exceptions were noted, or if exceptions were noted and their description is given.",
+                        "description": "Text describing the result of the tests conducted by the auditor on the controls specified by the service organization. The result can be 'Exception noted' or 'No exceptions noted' and nothing else.",
+                    },
+                    "servicer_response": {
+                        "type": "string",
+                        "description": "Servicer response is the text describing the response from the service organization to the exceptions noted by the auditor if the result of tests is 'Exception noted'.",
                     },
                 },
-                "required": ["control_number", "controls_specified", "tests_of_controls", "result_of_tests"],
+                "required": ["control_number", "controls_specified", "tests_of_controls", "result_of_tests","servicer_response"],
             },
         },
     },
@@ -181,16 +185,20 @@ IMPORTANT INSTRUCTIONS:
 - Never extract an reference of a Control Objective or CUEC, only extract the definition that is explicitly mentioned in the text.
 - If a control objective number is mentioned as COX.X, COXX.X then it is a reference to a control objective and should not be extracted. This is very important to check never extract a reference like COX.X, COXX.X or consider it a control objective.
 - Make sure to extract the supporting control activities for the Control Objective very carefully. There should not be any mismatch / repetition of information. This can be empty but only and only in case of no supporting control activities mentioned in the text.
-- Make sure to output the Control Objective or CUEC number correctly do not add or append any prefix / suffix like CO or 'Control Order Number' with the Control order number number.
+- Make sure to output the Control Objective or CUEC number correctly do not add or append any prefix / suffix like CO or 'Control Order Number' with the Control order number.
 - Make sure to output the number (cuec number) carefully and do not add or append any prefix / suffix with it like CUEC-1 or XXXX-2, just mention the number X and nothing else.
 - Make sure to extract the related criteria for the CUEC very carefully. There should not be any mismatch / repetition of information. This can be empty but only and only in case of no related criteria mentioned in the text.
 - If no number is present for a Control Objective or CUEC then return an empty list.
 - Exception are mentioned against the control number and the control number is mentioned in the text.
 - Extract the exception information only if is mentioned "Exception noted." or "No exceptions noted." in the text.
-- When noting exceptions, write either "No exception noted" or "Exception noted" and nothing else, also provide a brief description of the exception if and only if there is a description written after "Exception noted."
-- Do not mix management response with the result of tests, they are two different things and should be extracted separately. Be careful when extracting info, make sure it is not repeated or mixed in result of tests and management response.
+- Extract result of test only as "Exception noted." or "No exceptions noted." and nothing else. 
+- When noting exceptions, the actions of the service auditor and their response should be noted as servicer response. Please do not generate any response on your own. State what is explicitly mentioned in the text word to word."
+- Please be aware of this. If there is no servicer response mentioned in the text then it means there is no Exception noted.
+- Servicer response is the response from the service auditor, make sure to extract it correctly. If there is no servicer response / service auditor mentioned in the text then it means there is no Exception noted.
 - Do not make up any Control Objective or CUEC information on your own and only extract verbatim text from the provided text.
+- Do not mix CSOC with CUEC, both are different. CSOC is Complementary Subservice Organization Controls where as CUEC is Complementary User Entity Controls.
 """
+
 
 metadata_prompt = """You are an expert document metadata extractor expert in working on System and Organization Controls (SOC) reports. Given the first few pages of an SOC Report, You are required to extract the following metadata information:
 - Title: The title of the document.
@@ -218,7 +226,9 @@ class ProcessSOC:
         # self._user_service = UserService()
         # self._user_service = user_service
 
-        self._client = get_openai_async_client(base_url="https://openrouter.ai/api/v1", api_key="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")
+        self._client = get_openai_async_client(base_url="https://openrouter.ai/api/v1", api_key="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")
+
+        
 
         
     async def __call__(self, user_id: str, kb_doc_id: str, pdf_bytes: bytes) -> None:
@@ -233,8 +243,6 @@ class ProcessSOC:
         df_cleaned_co, df_cleaned_cuec, df_cleaned_exception = self._clean_and_sort_data(
             structured_data_co, structured_data_cuec, structured_data_exception
         )
-
-        display(df_cleaned_exception)
 
         metadata = asyncio.run(self._get_metadata(pdf_bytes))
         # await self._get_metadata(pdf_bytes)
@@ -284,13 +292,13 @@ class ProcessSOC:
         for index, row in df_cleaned_exception.iterrows():
             self._exception_service.add(
                 ControlException(
-                    objective_id="1",
-                    control_id=row["Control Number"],
+                    objective_id="",
+                    control_id="",
+                    number=row["Control Number"],
                     controls_specified=row["Controls Specified"],
                     tests=row["Tests of Controls"],
                     results=row["Result of Tests"],
-                    servicer_response="",
-                    number="",
+                    servicer_response=row["Servicer Response"],
                     soc_id="",
                     mitigating_controls="",
                     deficiency="",
@@ -321,18 +329,24 @@ class ProcessSOC:
 
     def _find_keyword_pages(self, pdf_bytes: bytes) -> List[int]:
         """Finds pages containing relevant keywords in the PDF."""
-        keywords = ["Control Objective", "Complementary User Entity Controls", "CUEC"]
+        keywords = ["Control Objective", "Complementary User Entity Controls", "CUEC", "Control Objectives"]
         filtered_pages = []
 
         with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+            total_pages = len(pdf.pages)
             for index, page in enumerate(pdf.pages):
-                text = page.extract_text()
-                if text :
+                text = page.extract_text(x_tolerance=1)
+                if text:
                     exact_found_keywords = self._complete_keyword_search(text, keywords)
                     if exact_found_keywords:
-                        filtered_pages.append(index + 1) 
- 
+                        # Append the current page and the next 3 pages if available
+                        for offset in range(4):  # offset 0 means current page, then next 3 pages
+                            page_num = index + 1 + offset  # page numbering starts at 1
+                            if page_num <= total_pages and page_num not in filtered_pages:
+                                filtered_pages.append(page_num)
+                                
         return filtered_pages
+
 
     def _extract_pdf_data(self, pdf_bytes: bytes, filtered_page_list: List[int]) -> List[str]:
         """Extracts text & tables only from the relevant pages of the PDF."""
@@ -381,8 +395,7 @@ class ProcessSOC:
 
 
         tasks = [
-            self._call_llm_async(page_data, system_prompt, tools) for page_data in data_list
-        ]
+            self._call_llm_async(page_data, system_prompt, tools) for page_data in data_list]
 
         responses = await asyncio.gather(*tasks)
 
@@ -410,9 +423,11 @@ class ProcessSOC:
                         "Controls Specified": item.get("controls_specified", ""),
                         "Tests of Controls": item.get("tests_of_controls", ""),
                         "Result of Tests": item.get("result_of_tests", ""),
+                        "Servicer Response": item.get("servicer_response", "")
                     })
 
         return structured_data_co, structured_data_cuec, structured_data_exception
+
 
     def _clean_and_sort_data(self, structured_data_co, structured_data_cuec, structured_data_exception):
             """Cleans and sorts the extracted data."""
@@ -420,7 +435,8 @@ class ProcessSOC:
             df_cuec = pd.DataFrame(structured_data_cuec)
             df_exception = pd.DataFrame(structured_data_exception)
 
-            df_cleaned_co = df_co.groupby("Control Objective Number", as_index=False).agg({
+            df_co_filtered = df_co[df_co["Control Objective Number"] != 0]
+            df_cleaned_co = df_co_filtered.groupby("Control Objective Number", as_index=False).agg({
                 "Page Number": "first",
                 "Supporting Control Activity": lambda x: ", ".join(sorted(set(", ".join(x).split(", ")) if any(x) else [])),
                 "Control Objective Description": "first"
@@ -433,16 +449,15 @@ class ProcessSOC:
                 "Related Criteria": lambda x: ", ".join(sorted(set(item for sublist in x.dropna() if isinstance(sublist, list) for item in sublist))) if any(x.dropna()) else ""
             }).sort_values(by="CUEC Number", key=lambda x: x.astype(int)).reset_index(drop=True)
 
-            df_filtered = df_exception[df_exception["Result of Tests"].str.contains("Exception noted", na=False)].copy()
-
-            df_filtered[['Exception Note', 'Description']] = df_filtered["Result of Tests"].str.split("\n", n=1, expand=True)
-
-            df_cleaned_exception = df_filtered.groupby("Control Number", as_index=False).agg({
+            df_cleaned_exception = df_exception.groupby("Control Number", as_index=False).agg({
                 "Page Number": "first",
                 "Controls Specified": "first",
                 "Tests of Controls": "first",
                 "Result of Tests": "first",
+                "Servicer Response": "first",
             }).sort_values(by="Control Number").reset_index(drop=True)
+
+            df_cleaned_exception = df_cleaned_exception[df_cleaned_exception["Result of Tests"] == "Exception noted."]
 
 
             return df_cleaned_co, df_cleaned_cuec, df_cleaned_exception
