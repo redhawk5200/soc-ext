@@ -226,9 +226,9 @@ class ProcessSOC:
         # self._user_service = UserService()
         # self._user_service = user_service
 
-        self._client = get_openai_async_client(base_url="https://openrouter.ai/api/v1", api_key="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")
-
-        
+        self._client = AsyncOpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key="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") ### Enter your api key here 
 
         
     async def __call__(self, user_id: str, kb_doc_id: str, pdf_bytes: bytes) -> None:
